@@ -42,7 +42,7 @@ impl Scanner {
             '+' => self.add_token(TokenType::PLUS, None),
             ';' => self.add_token(TokenType::SEMICOLON, None),
             '*' => self.add_token(TokenType::STAR, None),
-            _ => error(self.line, "Unexpected character.".to_string()),
+            char => error(self.line, format!("Unexpected character: {char}")),
         }
     }
 

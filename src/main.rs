@@ -8,6 +8,17 @@ mod scanner;
 mod token;
 mod token_type;
 
+static mut HAD_ERROR: bool = false;
+
+pub fn error(line: u64, message: String) {
+    report(line, "".to_string(), message);
+}
+
+fn report(line: u64, r#where: String, message: String) {
+    unsafe { HAD_ERROR = true };
+    eprintln!("[line {}] Error{}: {}", line, r#where, message);
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -30,18 +41,14 @@ fn main() {
             for token in tokens {
                 println!("{}", token.to_string());
             }
+
+            if unsafe { HAD_ERROR } {
+                std::process::exit(65);
+            }
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
             return;
         }
     }
-}
-
-pub fn error(line: u64, message: String) {
-    report(line, "".to_string(), message);
-}
-
-fn report(line: u64, r#where: String, message: String) {
-    println!("[line {}] Error{}: {}", line, r#where, message);
 }
