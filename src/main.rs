@@ -2,6 +2,12 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 
+use scanner::Scanner;
+
+mod scanner;
+mod token;
+mod token_type;
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -19,10 +25,10 @@ fn main() {
                 return String::new();
             });
 
-            if !file_contents.is_empty() {
-                panic!("Scanner not implemented");
-            } else {
-                println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
+            let mut scanner = Scanner::new(file_contents);
+            let tokens = scanner.scan_tokens();
+            for token in tokens {
+                println!("{}", token.to_string());
             }
         }
         _ => {
@@ -30,4 +36,12 @@ fn main() {
             return;
         }
     }
+}
+
+pub fn error(line: u64, message: String) {
+    report(line, "".to_string(), message);
+}
+
+fn report(line: u64, r#where: String, message: String) {
+    println!("[line {}] Error{}: {}", line, r#where, message);
 }
