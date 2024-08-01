@@ -31,7 +31,8 @@ impl Scanner {
     }
 
     fn scan_token(&mut self) {
-        match self.advance() {
+        let char = self.advance();
+        match char {
             '(' => self.add_token(TokenType::LEFT_PAREN, None),
             ')' => self.add_token(TokenType::RIGHT_PAREN, None),
             '{' => self.add_token(TokenType::LEFT_BRACE, None),
@@ -42,8 +43,52 @@ impl Scanner {
             '+' => self.add_token(TokenType::PLUS, None),
             ';' => self.add_token(TokenType::SEMICOLON, None),
             '*' => self.add_token(TokenType::STAR, None),
+            '!' => {
+                let r#type = if self.r#match('=') {
+                    TokenType::BANG_EQUAL
+                } else {
+                    TokenType::BANG
+                };
+                self.add_token(r#type, None);
+            }
+            '=' => {
+                let r#type = if self.r#match('=') {
+                    TokenType::EQUAL_EQUAL
+                } else {
+                    TokenType::EQUAL
+                };
+                self.add_token(r#type, None);
+            }
+            '<' => {
+                let r#type = if self.r#match('=') {
+                    TokenType::LESS_EQUAL
+                } else {
+                    TokenType::LESS
+                };
+                self.add_token(r#type, None);
+            }
+            '>' => {
+                let r#type = if self.r#match('=') {
+                    TokenType::GREATER_EQUAL
+                } else {
+                    TokenType::GREATER
+                };
+                self.add_token(r#type, None);
+            }
             char => error(self.line, format!("Unexpected character: {char}")),
         }
+    }
+
+    fn r#match(&mut self, expected: char) -> bool {
+        if self.is_at_end() {
+            return false;
+        }
+        if self.source[self.current] != expected {
+            return false;
+        }
+
+        self.current += 1;
+        return true;
     }
 
     fn advance(&mut self) -> char {
