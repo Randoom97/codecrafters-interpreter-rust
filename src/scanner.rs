@@ -94,11 +94,21 @@ impl Scanner {
             char => {
                 if self.is_digit(char) {
                     self.number();
+                } else if self.is_alpha(char) {
+                    self.identifier();
                 } else {
                     error(self.line, format!("Unexpected character: {char}"));
                 }
             }
         }
+    }
+
+    fn identifier(&mut self) {
+        while self.is_alpha_numeric(self.peek()) {
+            self.advance();
+        }
+
+        self.add_token(TokenType::IDENTIFIER, None);
     }
 
     fn number(&mut self) {
@@ -166,6 +176,14 @@ impl Scanner {
             return '\0';
         }
         return self.source[self.current + 1];
+    }
+
+    fn is_alpha(&self, c: char) -> bool {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+    }
+
+    fn is_alpha_numeric(&self, c: char) -> bool {
+        return self.is_alpha(c) || self.is_digit(c);
     }
 
     fn is_digit(&self, c: char) -> bool {
