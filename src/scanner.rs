@@ -75,6 +75,17 @@ impl Scanner {
                 };
                 self.add_token(r#type, None);
             }
+            '/' => {
+                if self.r#match('/') {
+                    while self.peek() != '\n' && !self.is_at_end() {
+                        self.advance();
+                    }
+                } else {
+                    self.add_token(TokenType::SLASH, None);
+                }
+            }
+            ' ' | '\r' | '\t' => {}
+            '\n' => self.line += 1,
             char => error(self.line, format!("Unexpected character: {char}")),
         }
     }
@@ -89,6 +100,13 @@ impl Scanner {
 
         self.current += 1;
         return true;
+    }
+
+    fn peek(&self) -> char {
+        if self.is_at_end() {
+            return '\0';
+        }
+        return self.source[self.current];
     }
 
     fn advance(&mut self) -> char {

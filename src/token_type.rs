@@ -13,7 +13,7 @@ pub enum TokenType {
     MINUS,
     PLUS,
     SEMICOLON,
-    // SLASH,
+    SLASH,
     STAR,
 
     // One or two character tokens.
