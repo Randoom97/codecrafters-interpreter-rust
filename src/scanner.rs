@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::{
     error,
     token::{Literal, Token},
@@ -10,6 +12,7 @@ pub struct Scanner {
     start: usize,
     current: usize,
     line: u64,
+    keywords: HashMap<String, TokenType>,
 }
 
 impl Scanner {
@@ -20,6 +23,24 @@ impl Scanner {
             start: 0,
             current: 0,
             line: 1,
+            keywords: HashMap::from([
+                ("and".to_string(), TokenType::AND),
+                ("class".to_string(), TokenType::CLASS),
+                ("else".to_string(), TokenType::ELSE),
+                ("false".to_string(), TokenType::FALSE),
+                ("for".to_string(), TokenType::FOR),
+                ("fun".to_string(), TokenType::FUN),
+                ("if".to_string(), TokenType::IF),
+                ("nil".to_string(), TokenType::NIL),
+                ("or".to_string(), TokenType::OR),
+                ("print".to_string(), TokenType::PRINT),
+                ("return".to_string(), TokenType::RETURN),
+                ("super".to_string(), TokenType::SUPER),
+                ("this".to_string(), TokenType::THIS),
+                ("true".to_string(), TokenType::TRUE),
+                ("var".to_string(), TokenType::VAR),
+                ("while".to_string(), TokenType::WHILE),
+            ]),
         };
     }
 
@@ -108,7 +129,9 @@ impl Scanner {
             self.advance();
         }
 
-        self.add_token(TokenType::IDENTIFIER, None);
+        let text: String = self.source[self.start..self.current].into_iter().collect();
+        let r#type = self.keywords.get(&text).unwrap_or(&TokenType::IDENTIFIER);
+        self.add_token(r#type.clone(), None);
     }
 
     fn number(&mut self) {
