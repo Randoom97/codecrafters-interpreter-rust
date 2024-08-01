@@ -1,4 +1,8 @@
-use crate::{error, token::Token, token_type::TokenType};
+use crate::{
+    error,
+    token::{Literal, Token},
+    token_type::TokenType,
+};
 
 pub struct Scanner {
     source: Vec<char>,
@@ -87,8 +91,35 @@ impl Scanner {
             ' ' | '\r' | '\t' => {}
             '"' => self.string(),
             '\n' => self.line += 1,
-            char => error(self.line, format!("Unexpected character: {char}")),
+            char => {
+                if self.is_digit(char) {
+                    self.number();
+                } else {
+                    error(self.line, format!("Unexpected character: {char}"));
+                }
+            }
         }
+    }
+
+    fn number(&mut self) {
+        while self.is_digit(self.peek()) {
+            self.advance();
+        }
+
+        if self.peek() == '.' && self.is_digit(self.peek_next()) {
+            self.advance();
+            while self.is_digit(self.peek()) {
+                self.advance();
+            }
+        }
+
+        let substring: String = self.source[self.start..self.current].into_iter().collect();
+        self.add_token(
+            TokenType::NUMBER,
+            Some(Literal::Number(
+                str::parse::<f64>(substring.as_str()).unwrap(),
+            )),
+        )
     }
 
     fn string(&mut self) {
@@ -108,7 +139,7 @@ impl Scanner {
         let value: String = self.source[(self.start + 1)..(self.current - 1)]
             .into_iter()
             .collect();
-        self.add_token(TokenType::STRING, Some(value));
+        self.add_token(TokenType::STRING, Some(Literal::String(value)));
     }
 
     fn r#match(&mut self, expected: char) -> bool {
@@ -130,13 +161,24 @@ impl Scanner {
         return self.source[self.current];
     }
 
+    fn peek_next(&self) -> char {
+        if self.current + 1 >= self.source.len() {
+            return '\0';
+        }
+        return self.source[self.current + 1];
+    }
+
+    fn is_digit(&self, c: char) -> bool {
+        return c >= '0' && c <= '9';
+    }
+
     fn advance(&mut self) -> char {
         let char = self.source[self.current];
         self.current += 1;
         return char;
     }
 
-    fn add_token(&mut self, r#type: TokenType, literal: Option<String>) {
+    fn add_token(&mut self, r#type: TokenType, literal: Option<Literal>) {
         let text: String = self.source[self.start..self.current].into_iter().collect();
         self.tokens
             .push(Token::new(r#type, text, literal, self.line));
