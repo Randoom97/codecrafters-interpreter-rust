@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     error,
-    token::{Literal, Token},
+    token::{LiteralValue, Token},
     token_type::TokenType,
 };
 
@@ -149,7 +149,7 @@ impl Scanner {
         let substring: String = self.source[self.start..self.current].into_iter().collect();
         self.add_token(
             TokenType::NUMBER,
-            Some(Literal::Number(
+            Some(LiteralValue::Number(
                 str::parse::<f64>(substring.as_str()).unwrap(),
             )),
         )
@@ -172,7 +172,7 @@ impl Scanner {
         let value: String = self.source[(self.start + 1)..(self.current - 1)]
             .into_iter()
             .collect();
-        self.add_token(TokenType::STRING, Some(Literal::String(value)));
+        self.add_token(TokenType::STRING, Some(LiteralValue::String(value)));
     }
 
     fn r#match(&mut self, expected: char) -> bool {
@@ -219,7 +219,7 @@ impl Scanner {
         return char;
     }
 
-    fn add_token(&mut self, r#type: TokenType, literal: Option<Literal>) {
+    fn add_token(&mut self, r#type: TokenType, literal: Option<LiteralValue>) {
         let text: String = self.source[self.start..self.current].into_iter().collect();
         self.tokens
             .push(Token::new(r#type, text, literal, self.line));

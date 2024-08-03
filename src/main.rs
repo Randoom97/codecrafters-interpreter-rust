@@ -2,8 +2,15 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 
+use ast_printer::AstPrinter;
+use parser::Parser;
 use scanner::Scanner;
+use token::Token;
+use token_type::TokenType;
 
+mod ast;
+mod ast_printer;
+mod parser;
 mod scanner;
 mod token;
 mod token_type;
@@ -19,6 +26,14 @@ fn report(line: u64, r#where: String, message: String) {
     eprintln!("[line {}] Error{}: {}", line, r#where, message);
 }
 
+pub fn error_token(token: &Token, message: String) {
+    if token.r#type == TokenType::EOF {
+        report(token.line, " at end".to_string(), message);
+    } else {
+        report(token.line, format!(" at '{}'", token.lexeme), message);
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -31,10 +46,7 @@ fn main() {
 
     match command.as_str() {
         "tokenize" => {
-            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
-                return String::new();
-            });
+            let file_contents = read_file(filename);
 
             let mut scanner = Scanner::new(file_contents);
             let tokens = scanner.scan_tokens();
@@ -46,9 +58,30 @@ fn main() {
                 std::process::exit(65);
             }
         }
+        "parse" => {
+            let file_contents = read_file(filename);
+
+            let mut scanner = Scanner::new(file_contents);
+            let tokens = scanner.scan_tokens();
+            let mut parser = Parser::new(tokens.clone());
+            let expr = parser.parse();
+
+            if unsafe { HAD_ERROR } {
+                std::process::exit(65);
+            }
+
+            println!("{}", AstPrinter::new().print(&expr.unwrap()));
+        }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
             return;
         }
     }
+}
+
+fn read_file(filename: &String) -> String {
+    return fs::read_to_string(filename).unwrap_or_else(|_| {
+        writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+        return String::new();
+    });
 }
