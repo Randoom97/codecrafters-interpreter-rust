@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::token_type::TokenType;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum LiteralValue {
     String(String),
     Number(f64),
@@ -19,7 +19,7 @@ impl Display for LiteralValue {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub r#type: TokenType,
     pub lexeme: String,

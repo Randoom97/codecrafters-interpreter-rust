@@ -2,7 +2,10 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 
+use ast::Expr;
 use ast_printer::AstPrinter;
+use interpreter::Interpreter;
+use interpreter::RuntimeError;
 use parser::Parser;
 use scanner::Scanner;
 use token::Token;
@@ -10,12 +13,14 @@ use token_type::TokenType;
 
 mod ast;
 mod ast_printer;
+mod interpreter;
 mod parser;
 mod scanner;
 mod token;
 mod token_type;
 
 static mut HAD_ERROR: bool = false;
+static mut HAD_RUNTIME_ERROR: bool = false;
 
 pub fn error(line: u64, message: String) {
     report(line, "".to_string(), message);
@@ -34,6 +39,11 @@ pub fn error_token(token: &Token, message: String) {
     }
 }
 
+pub fn runtime_error(error: RuntimeError) {
+    eprintln!("{}\n[line {}]", error.message, error.token.line);
+    unsafe { HAD_RUNTIME_ERROR = true };
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -46,10 +56,7 @@ fn main() {
 
     match command.as_str() {
         "tokenize" => {
-            let file_contents = read_file(filename);
-
-            let mut scanner = Scanner::new(file_contents);
-            let tokens = scanner.scan_tokens();
+            let tokens = tokenize(filename);
             for token in tokens {
                 println!("{}", token.to_string());
             }
@@ -59,18 +66,26 @@ fn main() {
             }
         }
         "parse" => {
-            let file_contents = read_file(filename);
-
-            let mut scanner = Scanner::new(file_contents);
-            let tokens = scanner.scan_tokens();
-            let mut parser = Parser::new(tokens.clone());
-            let expr = parser.parse();
+            let expr = parse(filename);
 
             if unsafe { HAD_ERROR } {
                 std::process::exit(65);
             }
 
             println!("{}", AstPrinter::new().print(&expr.unwrap()));
+        }
+        "evaluate" => {
+            let expr = parse(filename);
+
+            if unsafe { HAD_ERROR } {
+                std::process::exit(65);
+            }
+
+            Interpreter::new().interpret(expr.unwrap());
+
+            if unsafe { HAD_RUNTIME_ERROR } {
+                std::process::exit(70);
+            }
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
@@ -84,4 +99,16 @@ fn read_file(filename: &String) -> String {
         writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
         return String::new();
     });
+}
+
+fn tokenize(filename: &String) -> Vec<Token> {
+    let file_contents = read_file(filename);
+
+    let mut scanner = Scanner::new(file_contents);
+    return scanner.scan_tokens().clone();
+}
+
+fn parse(filename: &String) -> Option<Expr> {
+    let tokens = tokenize(filename);
+    return Parser::new(tokens.clone()).parse();
 }

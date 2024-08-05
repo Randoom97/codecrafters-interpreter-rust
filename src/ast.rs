@@ -1,10 +1,12 @@
 use crate::token::{LiteralValue, Token};
 
 pub trait Visitor {
-    fn visit_binary(&self, binary: &Binary) -> String;
-    fn visit_grouping(&self, grouping: &Grouping) -> String;
-    fn visit_literal(&self, literal: &Literal) -> String;
-    fn visit_unary(&self, unary: &Unary) -> String;
+    type Output;
+
+    fn visit_binary(&self, binary: &Binary) -> Self::Output;
+    fn visit_grouping(&self, grouping: &Grouping) -> Self::Output;
+    fn visit_literal(&self, literal: &Literal) -> Self::Output;
+    fn visit_unary(&self, unary: &Unary) -> Self::Output;
 }
 
 pub enum Expr {
@@ -15,13 +17,13 @@ pub enum Expr {
 }
 
 impl Expr {
-    pub fn accept(&self, visitor: &impl Visitor) -> String {
-        match self {
+    pub fn accept<T: Visitor>(&self, visitor: &T) -> T::Output {
+        return match self {
             Expr::Binary(binary) => visitor.visit_binary(binary),
             Expr::Grouping(grouping) => visitor.visit_grouping(grouping),
             Expr::Literal(literal) => visitor.visit_literal(literal),
             Expr::Unary(unary) => visitor.visit_unary(unary),
-        }
+        };
     }
 }
 

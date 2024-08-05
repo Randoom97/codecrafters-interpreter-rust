@@ -23,6 +23,8 @@ impl AstPrinter {
 }
 
 impl Visitor for AstPrinter {
+    type Output = String;
+
     fn visit_binary(&self, binary: &crate::ast::Binary) -> String {
         return self.parenthesize(&binary.operator.lexeme, &vec![&binary.left, &binary.right]);
     }
