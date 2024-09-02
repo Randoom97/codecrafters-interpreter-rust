@@ -1,6 +1,7 @@
 use crate::{
-    ast::{Binary, Expr, Grouping, Literal, Unary},
     error_token,
+    expr::{Assign, Binary, Expr, Grouping, Literal, Unary, Variable},
+    stmt::{Block, Expression, Print, Stmt, Var},
     token::{LiteralValue, Token},
     token_type::TokenType,
 };
@@ -23,12 +24,104 @@ impl Parser {
         return Parser { tokens, current: 0 };
     }
 
-    pub fn parse(&mut self) -> Option<Expr> {
+    pub fn parse(&mut self) -> Vec<Option<Stmt>> {
+        let mut statements = Vec::new();
+        while !self.is_at_end() {
+            let statement = self.declaration();
+            if statement.is_ok() {
+                statements.push(statement.ok());
+            } else {
+                self.synchronize();
+            }
+        }
+
+        return statements;
+    }
+
+    pub fn parse_expr(&mut self) -> Option<Expr> {
         return self.expression().ok();
     }
 
+    fn declaration(&mut self) -> Result<Stmt, ParseError> {
+        if self.r#match(&vec![TokenType::VAR]) {
+            return Ok(self.var_declaration()?);
+        }
+
+        return Ok(self.statement()?);
+    }
+
+    fn var_declaration(&mut self) -> Result<Stmt, ParseError> {
+        let name = self
+            .consume(TokenType::IDENTIFIER, "Expect variable name.")?
+            .clone();
+
+        let mut initializer: Option<Expr> = None;
+        if self.r#match(&vec![TokenType::EQUAL]) {
+            initializer = Some(self.expression()?);
+        }
+
+        self.consume(
+            TokenType::SEMICOLON,
+            "Expect ';' after variable declaration.",
+        )?;
+        return Ok(Stmt::Var(Var::new(name, initializer)));
+    }
+
+    fn statement(&mut self) -> Result<Stmt, ParseError> {
+        if self.r#match(&vec![TokenType::PRINT]) {
+            return Ok(self.print_statement()?);
+        }
+        if self.r#match(&vec![TokenType::LEFT_BRACE]) {
+            return Ok(Stmt::Block(Block::new(self.block()?)));
+        }
+
+        return Ok(self.expression_statement()?);
+    }
+
+    fn print_statement(&mut self) -> Result<Stmt, ParseError> {
+        let value = self.expression()?;
+        self.consume(TokenType::SEMICOLON, "Expect ';' after value.")?;
+        return Ok(Stmt::Print(Print::new(value)));
+    }
+
+    fn block(&mut self) -> Result<Vec<Stmt>, ParseError> {
+        let mut statements: Vec<Stmt> = Vec::new();
+
+        while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
+            statements.push(self.declaration()?);
+        }
+
+        self.consume(TokenType::RIGHT_BRACE, "Expect '}' after block.")?;
+        return Ok(statements);
+    }
+
+    fn expression_statement(&mut self) -> Result<Stmt, ParseError> {
+        let expr = self.expression()?;
+        self.consume(TokenType::SEMICOLON, "Expect ';' after expression.")?;
+        return Ok(Stmt::Expression(Expression::new(expr)));
+    }
+
     fn expression(&mut self) -> Result<Expr, ParseError> {
-        return self.equality();
+        return self.assignment();
+    }
+
+    fn assignment(&mut self) -> Result<Expr, ParseError> {
+        let expr = self.equality()?;
+        if self.r#match(&vec![TokenType::EQUAL]) {
+            let equals = self.previous().clone();
+            let value = self.assignment()?;
+
+            match expr {
+                Expr::Variable(variable) => {
+                    return Ok(Expr::Assign(Assign::new(variable.name, value)));
+                }
+                _ => {}
+            }
+
+            self.error(&equals, "Invalid assignment target.");
+        }
+
+        return Ok(expr);
     }
 
     fn equality(&mut self) -> Result<Expr, ParseError> {
@@ -109,6 +202,9 @@ impl Parser {
         }
         if self.r#match(&vec![TokenType::NUMBER, TokenType::STRING]) {
             return Ok(Expr::Literal(Literal::new(self.previous().literal.clone())));
+        }
+        if self.r#match(&vec![TokenType::IDENTIFIER]) {
+            return Ok(Expr::Variable(Variable::new(self.previous().clone())));
         }
         if self.r#match(&vec![TokenType::LEFT_PAREN]) {
             let expr: Expr = self.expression()?;

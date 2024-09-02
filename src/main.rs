@@ -2,20 +2,23 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 
-use ast::Expr;
 use ast_printer::AstPrinter;
+use expr::Expr;
 use interpreter::Interpreter;
 use interpreter::RuntimeError;
 use parser::Parser;
 use scanner::Scanner;
+use stmt::Stmt;
 use token::Token;
 use token_type::TokenType;
 
-mod ast;
 mod ast_printer;
+mod environment;
+mod expr;
 mod interpreter;
 mod parser;
 mod scanner;
+mod stmt;
 mod token;
 mod token_type;
 
@@ -66,7 +69,7 @@ fn main() {
             }
         }
         "parse" => {
-            let expr = parse(filename);
+            let expr = parse_expr(filename);
 
             if unsafe { HAD_ERROR } {
                 std::process::exit(65);
@@ -75,13 +78,29 @@ fn main() {
             println!("{}", AstPrinter::new().print(&expr.unwrap()));
         }
         "evaluate" => {
-            let expr = parse(filename);
+            let expr = parse_expr(filename);
 
             if unsafe { HAD_ERROR } {
                 std::process::exit(65);
             }
 
-            Interpreter::new().interpret(expr.unwrap());
+            Interpreter::new().interpret_expr(expr.unwrap());
+
+            if unsafe { HAD_RUNTIME_ERROR } {
+                std::process::exit(70);
+            }
+        }
+        "run" => {
+            let statement_options = parse(filename);
+
+            if unsafe { HAD_ERROR } {
+                std::process::exit(65);
+            }
+
+            // would have had errors, and exited, if any of the options were None
+            let statements: Vec<Stmt> = statement_options.into_iter().flatten().collect();
+
+            Interpreter::new().interpret(statements);
 
             if unsafe { HAD_RUNTIME_ERROR } {
                 std::process::exit(70);
@@ -108,7 +127,12 @@ fn tokenize(filename: &String) -> Vec<Token> {
     return scanner.scan_tokens().clone();
 }
 
-fn parse(filename: &String) -> Option<Expr> {
+fn parse_expr(filename: &String) -> Option<Expr> {
+    let tokens = tokenize(filename);
+    return Parser::new(tokens.clone()).parse_expr();
+}
+
+fn parse(filename: &String) -> Vec<Option<Stmt>> {
     let tokens = tokenize(filename);
     return Parser::new(tokens.clone()).parse();
 }

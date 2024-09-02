@@ -1,6 +1,8 @@
 use crate::{
-    ast::{Expr, Visitor},
+    environment::Environment,
+    expr::{self, Expr},
     runtime_error,
+    stmt::{self, Stmt},
     token::{LiteralValue, Token},
     token_type::TokenType,
 };
@@ -20,14 +22,18 @@ impl RuntimeError {
     }
 }
 
-pub struct Interpreter {}
+pub struct Interpreter {
+    environment: Option<Environment>,
+}
 
 impl Interpreter {
     pub fn new() -> Interpreter {
-        return Interpreter {};
+        Interpreter {
+            environment: Some(Environment::new(None)),
+        }
     }
 
-    pub fn interpret(&self, expression: Expr) {
+    pub fn interpret_expr(&mut self, expression: Expr) {
         let value = self.evaluate(&Box::new(expression));
         if value.is_ok() {
             println!("{}", self.stringify(&value.as_ref().unwrap()));
@@ -36,7 +42,50 @@ impl Interpreter {
         runtime_error(value.unwrap_err());
     }
 
-    fn evaluate(&self, expr: &Box<Expr>) -> Result<Option<LiteralValue>, RuntimeError> {
+    pub fn interpret(&mut self, statements: Vec<Stmt>) {
+        let mut error: Option<RuntimeError> = None;
+        for statement in statements {
+            let result = self.execute(&statement);
+            if result.is_err() {
+                error = result.err();
+                break;
+            }
+        }
+
+        if error.is_some() {
+            runtime_error(error.unwrap());
+        }
+    }
+
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+        stmt.accept(self)?;
+        return Ok(());
+    }
+
+    fn execute_block(&mut self, statements: &Vec<Stmt>) -> Result<(), RuntimeError> {
+        self.environment = Some(Environment::new(self.environment.take()));
+
+        let mut error: Result<(), RuntimeError> = Ok(());
+        for statement in statements {
+            let result = self.execute(statement);
+            if result.is_err() {
+                error = result;
+                break;
+            }
+        }
+
+        self.environment = self
+            .environment
+            .as_mut()
+            .unwrap()
+            .enclosing
+            .take()
+            .map(|e| *e);
+
+        return error;
+    }
+
+    fn evaluate(&mut self, expr: &Box<Expr>) -> Result<Option<LiteralValue>, RuntimeError> {
         return expr.accept(self);
     }
 
@@ -96,10 +145,52 @@ impl Interpreter {
     }
 }
 
-impl Visitor for Interpreter {
+impl stmt::Visitor for Interpreter {
+    type Output = Result<(), RuntimeError>;
+
+    fn visit_block(&mut self, block: &stmt::Block) -> Self::Output {
+        self.execute_block(&block.statements)?;
+        return Ok(());
+    }
+
+    fn visit_expression(&mut self, expression: &crate::stmt::Expression) -> Self::Output {
+        self.evaluate(&expression.expression)?;
+        return Ok(());
+    }
+
+    fn visit_print(&mut self, print: &crate::stmt::Print) -> Self::Output {
+        let value = self.evaluate(&print.expression)?;
+        println!("{}", self.stringify(&value));
+        return Ok(());
+    }
+
+    fn visit_var(&mut self, var: &stmt::Var) -> Self::Output {
+        let mut value: Option<LiteralValue> = None;
+        if var.initializer.is_some() {
+            value = self.evaluate(var.initializer.as_ref().unwrap())?;
+        }
+
+        self.environment
+            .as_mut()
+            .unwrap()
+            .define(var.name.lexeme.clone(), value);
+        return Ok(());
+    }
+}
+
+impl expr::Visitor for Interpreter {
     type Output = Result<Option<LiteralValue>, RuntimeError>;
 
-    fn visit_binary(&self, binary: &crate::ast::Binary) -> Self::Output {
+    fn visit_assign(&mut self, assign: &expr::Assign) -> Self::Output {
+        let value = self.evaluate(&assign.value)?;
+        self.environment
+            .as_mut()
+            .unwrap()
+            .assign(&assign.name, value.clone())?;
+        return Ok(value);
+    }
+
+    fn visit_binary(&mut self, binary: &crate::expr::Binary) -> Self::Output {
         let left = self.evaluate(&binary.left)?;
         let right = self.evaluate(&binary.right)?;
 
@@ -172,15 +263,15 @@ impl Visitor for Interpreter {
         };
     }
 
-    fn visit_grouping(&self, grouping: &crate::ast::Grouping) -> Self::Output {
+    fn visit_grouping(&mut self, grouping: &crate::expr::Grouping) -> Self::Output {
         return self.evaluate(&grouping.expression);
     }
 
-    fn visit_literal(&self, literal: &crate::ast::Literal) -> Self::Output {
+    fn visit_literal(&mut self, literal: &crate::expr::Literal) -> Self::Output {
         return Ok(literal.value.clone());
     }
 
-    fn visit_unary(&self, unary: &crate::ast::Unary) -> Self::Output {
+    fn visit_unary(&mut self, unary: &crate::expr::Unary) -> Self::Output {
         let right = self.evaluate(&unary.right)?;
 
         match unary.operator.r#type {
@@ -192,6 +283,15 @@ impl Visitor for Interpreter {
             // Unreachable
             _ => return Ok(None),
         }
+    }
+
+    fn visit_variable(&mut self, variable: &expr::Variable) -> Self::Output {
+        return Ok(self
+            .environment
+            .as_ref()
+            .unwrap()
+            .get(&variable.name)?
+            .clone());
     }
 }
 
