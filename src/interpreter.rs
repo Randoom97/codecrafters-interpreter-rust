@@ -89,12 +89,12 @@ impl Interpreter {
         return expr.accept(self);
     }
 
-    fn is_truthy(&self, value: Option<LiteralValue>) -> bool {
+    fn is_truthy(&self, value: &Option<LiteralValue>) -> bool {
         if value.is_none() {
             return false;
         }
-        match value.unwrap() {
-            LiteralValue::Boolean(value) => return value,
+        match value.as_ref().unwrap() {
+            LiteralValue::Boolean(value) => return *value,
             _ => return true,
         }
     }
@@ -153,12 +153,22 @@ impl stmt::Visitor for Interpreter {
         return Ok(());
     }
 
-    fn visit_expression(&mut self, expression: &crate::stmt::Expression) -> Self::Output {
+    fn visit_expression(&mut self, expression: &stmt::Expression) -> Self::Output {
         self.evaluate(&expression.expression)?;
         return Ok(());
     }
 
-    fn visit_print(&mut self, print: &crate::stmt::Print) -> Self::Output {
+    fn visit_if(&mut self, r#if: &stmt::If) -> Self::Output {
+        let condition_value = self.evaluate(&r#if.condition)?;
+        if self.is_truthy(&condition_value) {
+            self.execute(&r#if.then_branch)?;
+        } else if r#if.else_branch.is_some() {
+            self.execute(r#if.else_branch.as_ref().unwrap())?;
+        }
+        return Ok(());
+    }
+
+    fn visit_print(&mut self, print: &stmt::Print) -> Self::Output {
         let value = self.evaluate(&print.expression)?;
         println!("{}", self.stringify(&value));
         return Ok(());
@@ -176,6 +186,16 @@ impl stmt::Visitor for Interpreter {
             .define(var.name.lexeme.clone(), value);
         return Ok(());
     }
+
+    fn visit_while(&mut self, r#while: &stmt::While) -> Self::Output {
+        let mut condition_value = self.evaluate(&r#while.condition)?;
+        while self.is_truthy(&condition_value) {
+            self.execute(&r#while.body)?;
+            condition_value = self.evaluate(&r#while.condition)?;
+        }
+
+        return Ok(());
+    }
 }
 
 impl expr::Visitor for Interpreter {
@@ -190,7 +210,7 @@ impl expr::Visitor for Interpreter {
         return Ok(value);
     }
 
-    fn visit_binary(&mut self, binary: &crate::expr::Binary) -> Self::Output {
+    fn visit_binary(&mut self, binary: &expr::Binary) -> Self::Output {
         let left = self.evaluate(&binary.left)?;
         let right = self.evaluate(&binary.right)?;
 
@@ -258,20 +278,50 @@ impl expr::Visitor for Interpreter {
             TokenType::EQUAL_EQUAL => {
                 return Ok(Some(LiteralValue::Boolean(self.is_equal(&left, &right))))
             }
-            // Unreachable
-            _ => return Ok(None),
+            _ => {
+                return Err(RuntimeError::new(
+                    &binary.operator,
+                    "Invalid operator when evaluating binary!",
+                ))
+            }
         };
     }
 
-    fn visit_grouping(&mut self, grouping: &crate::expr::Grouping) -> Self::Output {
+    fn visit_grouping(&mut self, grouping: &expr::Grouping) -> Self::Output {
         return self.evaluate(&grouping.expression);
     }
 
-    fn visit_literal(&mut self, literal: &crate::expr::Literal) -> Self::Output {
+    fn visit_literal(&mut self, literal: &expr::Literal) -> Self::Output {
         return Ok(literal.value.clone());
     }
 
-    fn visit_unary(&mut self, unary: &crate::expr::Unary) -> Self::Output {
+    fn visit_logical(&mut self, logical: &expr::Logical) -> Self::Output {
+        let left = self.evaluate(&logical.left)?;
+
+        let left_truthy = self.is_truthy(&left);
+        match logical.operator.r#type {
+            TokenType::OR => {
+                if left_truthy {
+                    return Ok(left);
+                }
+            }
+            TokenType::AND => {
+                if !left_truthy {
+                    return Ok(left);
+                }
+            }
+            _ => {
+                return Err(RuntimeError::new(
+                    &logical.operator,
+                    "Invalid operator when evaluating logical!",
+                ))
+            }
+        }
+
+        return self.evaluate(&logical.right);
+    }
+
+    fn visit_unary(&mut self, unary: &expr::Unary) -> Self::Output {
         let right = self.evaluate(&unary.right)?;
 
         match unary.operator.r#type {
@@ -279,9 +329,13 @@ impl expr::Visitor for Interpreter {
                 let number = self.check_number_operand(&unary.operator, &right)?;
                 return Ok(Some(LiteralValue::Number(-number)));
             }
-            TokenType::BANG => return Ok(Some(LiteralValue::Boolean(!self.is_truthy(right)))),
-            // Unreachable
-            _ => return Ok(None),
+            TokenType::BANG => return Ok(Some(LiteralValue::Boolean(!self.is_truthy(&right)))),
+            _ => {
+                return Err(RuntimeError::new(
+                    &unary.operator,
+                    "Invalid operator when evaluating unary!",
+                ))
+            }
         }
     }
 

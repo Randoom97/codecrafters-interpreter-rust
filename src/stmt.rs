@@ -5,15 +5,19 @@ pub trait Visitor {
 
     fn visit_block(&mut self, block: &Block) -> Self::Output;
     fn visit_expression(&mut self, stmt: &Expression) -> Self::Output;
+    fn visit_if(&mut self, r#if: &If) -> Self::Output;
     fn visit_print(&mut self, print: &Print) -> Self::Output;
     fn visit_var(&mut self, var: &Var) -> Self::Output;
+    fn visit_while(&mut self, r#while: &While) -> Self::Output;
 }
 
 pub enum Stmt {
     Block(Block),
     Expression(Expression),
+    If(If),
     Print(Print),
     Var(Var),
+    While(While),
 }
 
 impl Stmt {
@@ -21,8 +25,10 @@ impl Stmt {
         return match self {
             Stmt::Block(block) => visitor.visit_block(block),
             Stmt::Expression(expression) => visitor.visit_expression(expression),
+            Stmt::If(r#if) => visitor.visit_if(r#if),
             Stmt::Print(print) => visitor.visit_print(print),
             Stmt::Var(var) => visitor.visit_var(var),
+            Stmt::While(r#while) => visitor.visit_while(r#while),
         };
     }
 }
@@ -49,6 +55,22 @@ impl Expression {
     }
 }
 
+pub struct If {
+    pub condition: Box<Expr>,
+    pub then_branch: Box<Stmt>,
+    pub else_branch: Option<Box<Stmt>>,
+}
+
+impl If {
+    pub fn new(condition: Expr, then_branch: Stmt, else_branch: Option<Stmt>) -> If {
+        If {
+            condition: Box::new(condition),
+            then_branch: Box::new(then_branch),
+            else_branch: else_branch.map(|eb| Box::new(eb)),
+        }
+    }
+}
+
 pub struct Print {
     pub expression: Box<Expr>,
 }
@@ -71,6 +93,20 @@ impl Var {
         Var {
             name,
             initializer: initializer.map(|i| Box::new(i)),
+        }
+    }
+}
+
+pub struct While {
+    pub condition: Box<Expr>,
+    pub body: Box<Stmt>,
+}
+
+impl While {
+    pub fn new(condition: Expr, body: Stmt) -> While {
+        While {
+            condition: Box::new(condition),
+            body: Box::new(body),
         }
     }
 }
