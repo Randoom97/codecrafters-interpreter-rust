@@ -1,11 +1,22 @@
+use std::{
+    rc::Rc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
 use crate::{
     environment::Environment,
     expr::{self, Expr},
+    lox_callables::{LoxAnonymous, LoxCallable, LoxCallables, LoxFunction},
     runtime_error,
     stmt::{self, Stmt},
     token::{LiteralValue, Token},
     token_type::TokenType,
 };
+
+pub enum RuntimeExceptions {
+    RuntimeError(RuntimeError),
+    Return(Return),
+}
 
 #[derive(Debug)]
 pub struct RuntimeError {
@@ -15,35 +26,71 @@ pub struct RuntimeError {
 
 impl RuntimeError {
     pub fn new(token: &Token, message: &str) -> RuntimeError {
-        return RuntimeError {
+        RuntimeError {
             token: token.clone(),
             message: message.to_string(),
-        };
+        }
+    }
+}
+
+pub struct Return {
+    pub value: Option<LiteralValue>,
+}
+
+impl Return {
+    pub fn new(value: Option<LiteralValue>) -> Return {
+        Return { value }
     }
 }
 
 pub struct Interpreter {
-    environment: Option<Environment>,
+    pub globals: Rc<Environment>,
+    environment: Rc<Environment>,
 }
 
 impl Interpreter {
     pub fn new() -> Interpreter {
+        let globals = Rc::new(Environment::new(None));
+
+        // native functions here
+        globals.define(
+            "clock".to_owned(),
+            Some(LiteralValue::LoxCallable(LoxCallables::LoxAnonymous(
+                Box::new(LoxAnonymous::new(
+                    |_interpreter, _arguments| {
+                        Ok(Some(LiteralValue::Number(
+                            SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .unwrap()
+                                .as_secs_f64(),
+                        )))
+                    },
+                    || 0,
+                )),
+            ))),
+        );
+
+        let environment = Rc::clone(&globals);
         Interpreter {
-            environment: Some(Environment::new(None)),
+            globals,
+            environment,
         }
     }
 
     pub fn interpret_expr(&mut self, expression: Expr) {
         let value = self.evaluate(&Box::new(expression));
         if value.is_ok() {
-            println!("{}", self.stringify(&value.as_ref().unwrap()));
+            println!("{}", self.stringify(&value.ok().unwrap()));
             return;
         }
-        runtime_error(value.unwrap_err());
+        match value.unwrap_err() {
+            RuntimeExceptions::RuntimeError(run_error) => runtime_error(run_error),
+            _ => {}
+        }
     }
 
     pub fn interpret(&mut self, statements: Vec<Stmt>) {
-        let mut error: Option<RuntimeError> = None;
+        let mut error: Option<RuntimeExceptions> = None;
         for statement in statements {
             let result = self.execute(&statement);
             if result.is_err() {
@@ -53,19 +100,27 @@ impl Interpreter {
         }
 
         if error.is_some() {
-            runtime_error(error.unwrap());
+            match error.unwrap() {
+                RuntimeExceptions::RuntimeError(run_error) => runtime_error(run_error),
+                _ => {}
+            }
         }
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeError> {
+    fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeExceptions> {
         stmt.accept(self)?;
         return Ok(());
     }
 
-    fn execute_block(&mut self, statements: &Vec<Stmt>) -> Result<(), RuntimeError> {
-        self.environment = Some(Environment::new(self.environment.take()));
+    pub fn execute_block(
+        &mut self,
+        statements: &Vec<Stmt>,
+        environment: Rc<Environment>,
+    ) -> Result<(), RuntimeExceptions> {
+        let previous = Rc::clone(&self.environment);
+        self.environment = environment;
 
-        let mut error: Result<(), RuntimeError> = Ok(());
+        let mut error: Result<(), RuntimeExceptions> = Ok(());
         for statement in statements {
             let result = self.execute(statement);
             if result.is_err() {
@@ -74,18 +129,12 @@ impl Interpreter {
             }
         }
 
-        self.environment = self
-            .environment
-            .as_mut()
-            .unwrap()
-            .enclosing
-            .take()
-            .map(|e| *e);
+        self.environment = previous;
 
         return error;
     }
 
-    fn evaluate(&mut self, expr: &Box<Expr>) -> Result<Option<LiteralValue>, RuntimeError> {
+    fn evaluate(&mut self, expr: &Expr) -> Result<Option<LiteralValue>, RuntimeExceptions> {
         return expr.accept(self);
     }
 
@@ -123,10 +172,15 @@ impl Interpreter {
         &self,
         operator: &Token,
         operand: &Option<LiteralValue>,
-    ) -> Result<f64, RuntimeError> {
+    ) -> Result<f64, RuntimeExceptions> {
         match operand {
             Some(LiteralValue::Number(value)) => return Ok(*value),
-            _ => return Err(RuntimeError::new(operator, "Operand must be a number.")),
+            _ => {
+                return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+                    operator,
+                    "Operand must be a number.",
+                )))
+            }
         }
     }
 
@@ -135,26 +189,43 @@ impl Interpreter {
         operator: &Token,
         left: &Option<LiteralValue>,
         right: &Option<LiteralValue>,
-    ) -> Result<(f64, f64), RuntimeError> {
+    ) -> Result<(f64, f64), RuntimeExceptions> {
         let lnumber = number_cast(left);
         let rnumber = number_cast(right);
         if lnumber.is_some() && rnumber.is_some() {
             return Ok((lnumber.unwrap(), rnumber.unwrap()));
         }
-        return Err(RuntimeError::new(operator, "Operands must be numbers."));
+        return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+            operator,
+            "Operands must be numbers.",
+        )));
     }
 }
 
 impl stmt::Visitor for Interpreter {
-    type Output = Result<(), RuntimeError>;
+    type Output = Result<(), RuntimeExceptions>;
 
     fn visit_block(&mut self, block: &stmt::Block) -> Self::Output {
-        self.execute_block(&block.statements)?;
-        return Ok(());
+        let result = self.execute_block(
+            &block.statements,
+            Rc::new(Environment::new(Some(&self.environment))),
+        );
+        return result;
     }
 
     fn visit_expression(&mut self, expression: &stmt::Expression) -> Self::Output {
         self.evaluate(&expression.expression)?;
+        return Ok(());
+    }
+
+    fn visit_function(&mut self, function: &stmt::Function) -> Self::Output {
+        let value = Some(LiteralValue::LoxCallable(LoxCallables::LoxFunction(
+            Box::new(LoxFunction::new(
+                function.clone(),
+                Rc::clone(&self.environment),
+            )),
+        )));
+        self.environment.define(function.name.lexeme.clone(), value);
         return Ok(());
     }
 
@@ -174,16 +245,22 @@ impl stmt::Visitor for Interpreter {
         return Ok(());
     }
 
+    fn visit_return(&mut self, r#return: &stmt::Return) -> Self::Output {
+        let mut value = None;
+        if r#return.value.is_some() {
+            value = self.evaluate(r#return.value.as_ref().unwrap())?;
+        }
+
+        return Err(RuntimeExceptions::Return(Return::new(value)));
+    }
+
     fn visit_var(&mut self, var: &stmt::Var) -> Self::Output {
         let mut value: Option<LiteralValue> = None;
         if var.initializer.is_some() {
             value = self.evaluate(var.initializer.as_ref().unwrap())?;
         }
 
-        self.environment
-            .as_mut()
-            .unwrap()
-            .define(var.name.lexeme.clone(), value);
+        self.environment.define(var.name.lexeme.clone(), value);
         return Ok(());
     }
 
@@ -199,14 +276,11 @@ impl stmt::Visitor for Interpreter {
 }
 
 impl expr::Visitor for Interpreter {
-    type Output = Result<Option<LiteralValue>, RuntimeError>;
+    type Output = Result<Option<LiteralValue>, RuntimeExceptions>;
 
     fn visit_assign(&mut self, assign: &expr::Assign) -> Self::Output {
         let value = self.evaluate(&assign.value)?;
-        self.environment
-            .as_mut()
-            .unwrap()
-            .assign(&assign.name, value.clone())?;
+        self.environment.assign(&assign.name, value.clone())?;
         return Ok(value);
     }
 
@@ -247,10 +321,10 @@ impl expr::Visitor for Interpreter {
                     )));
                 }
 
-                return Err(RuntimeError::new(
+                return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
                     &binary.operator,
                     "Operands must be two numbers or two strings.",
-                ));
+                )));
             }
             TokenType::GREATER => {
                 let (lnumber, rnumber) =
@@ -279,11 +353,45 @@ impl expr::Visitor for Interpreter {
                 return Ok(Some(LiteralValue::Boolean(self.is_equal(&left, &right))))
             }
             _ => {
-                return Err(RuntimeError::new(
+                return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
                     &binary.operator,
                     "Invalid operator when evaluating binary!",
-                ))
+                )))
             }
+        };
+    }
+
+    fn visit_call(&mut self, call: &expr::Call) -> Self::Output {
+        let callee = self.evaluate(&call.callee)?;
+
+        let mut arguments = Vec::new();
+        for argument in &call.arguments {
+            arguments.push(self.evaluate(&Box::new(argument))?);
+        }
+
+        let mut function = match callee {
+            Some(LiteralValue::LoxCallable(callable)) => Ok(callable),
+            _ => Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+                &call.paren,
+                "Can only call functions and classes.",
+            ))),
+        }?;
+
+        if arguments.len() != function.arity() {
+            return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+                &call.paren,
+                &format!(
+                    "Expected {} arguments but got {}.",
+                    function.arity(),
+                    arguments.len()
+                ),
+            )));
+        }
+
+        let result = function.call(self, arguments);
+        return match result {
+            Err(RuntimeExceptions::Return(r#return)) => Ok(r#return.value),
+            _ => result,
         };
     }
 
@@ -311,10 +419,10 @@ impl expr::Visitor for Interpreter {
                 }
             }
             _ => {
-                return Err(RuntimeError::new(
+                return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
                     &logical.operator,
                     "Invalid operator when evaluating logical!",
-                ))
+                )))
             }
         }
 
@@ -331,21 +439,16 @@ impl expr::Visitor for Interpreter {
             }
             TokenType::BANG => return Ok(Some(LiteralValue::Boolean(!self.is_truthy(&right)))),
             _ => {
-                return Err(RuntimeError::new(
+                return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
                     &unary.operator,
                     "Invalid operator when evaluating unary!",
-                ))
+                )))
             }
         }
     }
 
     fn visit_variable(&mut self, variable: &expr::Variable) -> Self::Output {
-        return Ok(self
-            .environment
-            .as_ref()
-            .unwrap()
-            .get(&variable.name)?
-            .clone());
+        return Ok(self.environment.get(&variable.name)?);
     }
 }
 

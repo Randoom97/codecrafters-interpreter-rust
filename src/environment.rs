@@ -1,58 +1,62 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use crate::{
-    interpreter::RuntimeError,
+    interpreter::{RuntimeError, RuntimeExceptions},
     token::{LiteralValue, Token},
 };
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct Environment {
-    pub enclosing: Option<Box<Environment>>,
-    values: HashMap<String, Option<LiteralValue>>,
+    pub enclosing: Option<Rc<Environment>>,
+    pub values: RefCell<HashMap<String, Option<LiteralValue>>>,
 }
 
 impl Environment {
-    pub fn new(enclosing: Option<Environment>) -> Environment {
+    pub fn new(enclosing: Option<&Rc<Environment>>) -> Environment {
         Environment {
-            enclosing: enclosing.map(|e| Box::new(e)),
-            values: HashMap::new(),
+            enclosing: enclosing.map(|e| Rc::clone(e)),
+            values: RefCell::new(HashMap::new()),
         }
     }
 
-    pub fn get(&self, name: &Token) -> Result<&Option<LiteralValue>, RuntimeError> {
-        if self.values.contains_key(&name.lexeme) {
-            return Ok(self.values.get(&name.lexeme).unwrap());
+    pub fn get(&self, name: &Token) -> Result<Option<LiteralValue>, RuntimeExceptions> {
+        let value_ref = self.values.borrow();
+        if value_ref.contains_key(&name.lexeme) {
+            // cloning here isn't great, but using Rc<Environment> for closures (and objects?) ensures data update persistence
+            return Ok(value_ref.get(&name.lexeme).unwrap().clone());
         }
         if self.enclosing.is_some() {
             return self.enclosing.as_ref().unwrap().get(name);
         }
 
-        return Err(RuntimeError::new(
+        return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
             name,
             format!("Undefined variable '{}'.", name.lexeme).as_str(),
-        ));
+        )));
     }
 
     pub fn assign(
-        &mut self,
+        &self,
         name: &Token,
         value: Option<LiteralValue>,
-    ) -> Result<(), RuntimeError> {
-        if self.values.contains_key(&name.lexeme) {
-            self.values.insert(name.lexeme.clone(), value);
+    ) -> Result<(), RuntimeExceptions> {
+        let mut value_ref = self.values.borrow_mut();
+        if value_ref.contains_key(&name.lexeme) {
+            value_ref.insert(name.lexeme.clone(), value);
             return Ok(());
         }
 
         if self.enclosing.is_some() {
-            return self.enclosing.as_mut().unwrap().assign(name, value);
+            return self.enclosing.as_ref().unwrap().assign(name, value);
         }
 
-        return Err(RuntimeError::new(
+        return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
             name,
             format!("Undefined variable '{}'.", name.lexeme).as_str(),
-        ));
+        )));
     }
 
-    pub fn define(&mut self, name: String, value: Option<LiteralValue>) {
-        self.values.insert(name, value);
+    pub fn define(&self, name: String, value: Option<LiteralValue>) {
+        self.values.borrow_mut().insert(name, value);
     }
 }

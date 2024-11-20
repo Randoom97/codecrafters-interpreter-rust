@@ -1,12 +1,13 @@
 use std::fmt::Display;
 
-use crate::token_type::TokenType;
+use crate::{lox_callables::LoxCallables, token_type::TokenType};
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum LiteralValue {
     String(String),
     Number(f64),
     Boolean(bool),
+    LoxCallable(LoxCallables),
 }
 
 impl Display for LiteralValue {
@@ -15,11 +16,12 @@ impl Display for LiteralValue {
             LiteralValue::String(value) => write!(f, "{}", value),
             LiteralValue::Number(value) => write!(f, "{:?}", value),
             LiteralValue::Boolean(value) => write!(f, "{}", value),
+            LiteralValue::LoxCallable(value) => write!(f, "{}", value),
         }
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Token {
     pub r#type: TokenType,
     pub lexeme: String,

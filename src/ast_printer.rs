@@ -11,7 +11,7 @@ impl AstPrinter {
         return expr.accept(self);
     }
 
-    fn parenthesize(&mut self, name: &String, exprs: &Vec<&Box<Expr>>) -> String {
+    fn parenthesize(&mut self, name: &String, exprs: &Vec<&Expr>) -> String {
         let mut string = format!("({}", name);
         for expr in exprs {
             string += " ";
@@ -31,6 +31,10 @@ impl expr::Visitor for AstPrinter {
 
     fn visit_binary(&mut self, binary: &expr::Binary) -> String {
         return self.parenthesize(&binary.operator.lexeme, &vec![&binary.left, &binary.right]);
+    }
+
+    fn visit_call(&mut self, call: &expr::Call) -> Self::Output {
+        return self.parenthesize(&"function".to_owned(), &call.arguments.iter().collect());
     }
 
     fn visit_grouping(&mut self, grouping: &expr::Grouping) -> String {

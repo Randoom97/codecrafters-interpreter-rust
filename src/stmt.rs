@@ -5,17 +5,22 @@ pub trait Visitor {
 
     fn visit_block(&mut self, block: &Block) -> Self::Output;
     fn visit_expression(&mut self, stmt: &Expression) -> Self::Output;
+    fn visit_function(&mut self, function: &Function) -> Self::Output;
     fn visit_if(&mut self, r#if: &If) -> Self::Output;
     fn visit_print(&mut self, print: &Print) -> Self::Output;
+    fn visit_return(&mut self, r#return: &Return) -> Self::Output;
     fn visit_var(&mut self, var: &Var) -> Self::Output;
     fn visit_while(&mut self, r#while: &While) -> Self::Output;
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub enum Stmt {
     Block(Block),
     Expression(Expression),
+    Function(Function),
     If(If),
     Print(Print),
+    Return(Return),
     Var(Var),
     While(While),
 }
@@ -25,14 +30,17 @@ impl Stmt {
         return match self {
             Stmt::Block(block) => visitor.visit_block(block),
             Stmt::Expression(expression) => visitor.visit_expression(expression),
+            Stmt::Function(function) => visitor.visit_function(function),
             Stmt::If(r#if) => visitor.visit_if(r#if),
             Stmt::Print(print) => visitor.visit_print(print),
+            Stmt::Return(r#return) => visitor.visit_return(r#return),
             Stmt::Var(var) => visitor.visit_var(var),
             Stmt::While(r#while) => visitor.visit_while(r#while),
         };
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct Block {
     pub statements: Vec<Stmt>,
 }
@@ -43,6 +51,7 @@ impl Block {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct Expression {
     pub expression: Box<Expr>,
 }
@@ -55,6 +64,20 @@ impl Expression {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub struct Function {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Stmt>,
+}
+
+impl Function {
+    pub fn new(name: Token, params: Vec<Token>, body: Vec<Stmt>) -> Function {
+        Function { name, params, body }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct If {
     pub condition: Box<Expr>,
     pub then_branch: Box<Stmt>,
@@ -70,7 +93,7 @@ impl If {
         }
     }
 }
-
+#[derive(Clone, PartialEq, Debug)]
 pub struct Print {
     pub expression: Box<Expr>,
 }
@@ -83,6 +106,22 @@ impl Print {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
+pub struct Return {
+    pub keyword: Token,
+    pub value: Option<Expr>,
+}
+
+impl Return {
+    pub fn new(keyword: Token, value: Option<Expr>) -> Return {
+        Return {
+            keyword,
+            value: value,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Var {
     pub name: Token,
     pub initializer: Option<Box<Expr>>,
@@ -97,6 +136,7 @@ impl Var {
     }
 }
 
+#[derive(Clone, PartialEq, Debug)]
 pub struct While {
     pub condition: Box<Expr>,
     pub body: Box<Stmt>,
