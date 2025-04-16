@@ -445,7 +445,7 @@ impl Parser {
     }
 
     fn error(&self, token: &Token, message: &str) -> ParseError {
-        error_token(token, message.to_string());
+        error_token(token, message);
         return ParseError::new();
     }
 

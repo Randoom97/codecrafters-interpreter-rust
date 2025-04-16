@@ -1,4 +1,7 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    hash::{Hash, Hasher},
+};
 
 use crate::{lox_callables::LoxCallables, token_type::TokenType};
 
@@ -27,6 +30,7 @@ pub struct Token {
     pub lexeme: String,
     pub literal: Option<LiteralValue>,
     pub line: u64,
+    pub col: u64,
 }
 
 impl Token {
@@ -35,12 +39,14 @@ impl Token {
         lexeme: String,
         literal: Option<LiteralValue>,
         line: u64,
+        col: u64,
     ) -> Token {
         return Token {
             r#type,
             lexeme,
             literal,
             line,
+            col,
         };
     }
 
@@ -53,5 +59,17 @@ impl Token {
                 .as_ref()
                 .unwrap_or(&LiteralValue::String("null".to_string()))
         );
+    }
+}
+
+impl Eq for Token {}
+
+impl Hash for Token {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.r#type.hash(state);
+        self.lexeme.hash(state);
+        // ingore literal value because of type issues, and it's technically included in the lexeme
+        self.line.hash(state);
+        self.col.hash(state);
     }
 }

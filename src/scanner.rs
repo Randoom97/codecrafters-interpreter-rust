@@ -12,6 +12,7 @@ pub struct Scanner {
     start: usize,
     current: usize,
     line: u64,
+    line_start: u64,
     keywords: HashMap<String, TokenType>,
 }
 
@@ -23,6 +24,7 @@ impl Scanner {
             start: 0,
             current: 0,
             line: 1,
+            line_start: 0,
             keywords: HashMap::from([
                 ("and".to_string(), TokenType::AND),
                 ("class".to_string(), TokenType::CLASS),
@@ -46,12 +48,18 @@ impl Scanner {
 
     pub fn scan_tokens(&mut self) -> &Vec<Token> {
         while !self.is_at_end() {
+            self.line_start += (self.current - self.start) as u64;
             self.start = self.current;
             self.scan_token();
         }
 
-        self.tokens
-            .push(Token::new(TokenType::EOF, "".to_string(), None, self.line));
+        self.tokens.push(Token::new(
+            TokenType::EOF,
+            "".to_string(),
+            None,
+            self.line,
+            self.line_start,
+        ));
         return &self.tokens;
     }
 
@@ -111,14 +119,17 @@ impl Scanner {
             }
             ' ' | '\r' | '\t' => {}
             '"' => self.string(),
-            '\n' => self.line += 1,
+            '\n' => {
+                self.line += 1;
+                self.line_start = 0
+            }
             char => {
                 if self.is_digit(char) {
                     self.number();
                 } else if self.is_alpha(char) {
                     self.identifier();
                 } else {
-                    error(self.line, format!("Unexpected character: {char}"));
+                    error(self.line, &format!("Unexpected character: {char}"));
                 }
             }
         }
@@ -163,7 +174,7 @@ impl Scanner {
             self.advance();
         }
         if self.is_at_end() {
-            error(self.line, "Unterminated string.".to_string());
+            error(self.line, "Unterminated string.");
             return;
         }
 
@@ -221,8 +232,13 @@ impl Scanner {
 
     fn add_token(&mut self, r#type: TokenType, literal: Option<LiteralValue>) {
         let text: String = self.source[self.start..self.current].into_iter().collect();
-        self.tokens
-            .push(Token::new(r#type, text, literal, self.line));
+        self.tokens.push(Token::new(
+            r#type,
+            text,
+            literal,
+            self.line,
+            self.line_start,
+        ));
     }
 
     fn is_at_end(&self) -> bool {

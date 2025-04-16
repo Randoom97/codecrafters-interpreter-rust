@@ -7,6 +7,7 @@ use expr::Expr;
 use interpreter::Interpreter;
 use interpreter::RuntimeError;
 use parser::Parser;
+use resolver::Resolver;
 use scanner::Scanner;
 use stmt::Stmt;
 use token::Token;
@@ -18,6 +19,7 @@ mod expr;
 mod interpreter;
 mod lox_callables;
 mod parser;
+mod resolver;
 mod scanner;
 mod stmt;
 mod token;
@@ -26,16 +28,16 @@ mod token_type;
 static mut HAD_ERROR: bool = false;
 static mut HAD_RUNTIME_ERROR: bool = false;
 
-pub fn error(line: u64, message: String) {
+pub fn error(line: u64, message: &str) {
     report(line, "".to_string(), message);
 }
 
-fn report(line: u64, r#where: String, message: String) {
+fn report(line: u64, r#where: String, message: &str) {
     unsafe { HAD_ERROR = true };
     eprintln!("[line {}] Error{}: {}", line, r#where, message);
 }
 
-pub fn error_token(token: &Token, message: String) {
+pub fn error_token(token: &Token, message: &str) {
     if token.r#type == TokenType::EOF {
         report(token.line, " at end".to_string(), message);
     } else {
@@ -101,7 +103,15 @@ fn main() {
             // would have had errors, and exited, if any of the options were None
             let statements: Vec<Stmt> = statement_options.into_iter().flatten().collect();
 
-            Interpreter::new().interpret(statements);
+            let interpreter = Interpreter::new();
+            let mut resolver = Resolver::new(interpreter);
+            resolver.resolve_stmts(&statements);
+
+            if unsafe { HAD_ERROR } {
+                std::process::exit(65);
+            }
+
+            resolver.interpreter.interpret(statements);
 
             if unsafe { HAD_RUNTIME_ERROR } {
                 std::process::exit(70);

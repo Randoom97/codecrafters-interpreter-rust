@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -46,6 +47,12 @@ impl Return {
 pub struct Interpreter {
     pub globals: Rc<Environment>,
     environment: Rc<Environment>,
+    /*
+    The book uses Expr as key here because it hashes the memory location.
+    Rust doesn't do that by default and makes it hard to implement.
+    Token 'should' be equivalently unique because it contains the source index.
+     */
+    locals: HashMap<Token, u64>,
 }
 
 impl Interpreter {
@@ -71,9 +78,11 @@ impl Interpreter {
         );
 
         let environment = Rc::clone(&globals);
+        let locals = HashMap::new();
         Interpreter {
             globals,
             environment,
+            locals,
         }
     }
 
@@ -110,6 +119,10 @@ impl Interpreter {
     fn execute(&mut self, stmt: &Stmt) -> Result<(), RuntimeExceptions> {
         stmt.accept(self)?;
         return Ok(());
+    }
+
+    pub fn resolve(&mut self, token: &Token, depth: u64) {
+        self.locals.insert(token.clone(), depth);
     }
 
     pub fn execute_block(
@@ -200,6 +213,15 @@ impl Interpreter {
             "Operands must be numbers.",
         )));
     }
+
+    fn lookup_variable(&mut self, name: &Token) -> Result<Option<LiteralValue>, RuntimeExceptions> {
+        let distance = self.locals.get(name);
+        if distance.is_some() {
+            return self.environment.get_at(*distance.unwrap(), name);
+        } else {
+            return self.globals.get(name);
+        }
+    }
 }
 
 impl stmt::Visitor for Interpreter {
@@ -280,7 +302,13 @@ impl expr::Visitor for Interpreter {
 
     fn visit_assign(&mut self, assign: &expr::Assign) -> Self::Output {
         let value = self.evaluate(&assign.value)?;
-        self.environment.assign(&assign.name, value.clone())?;
+        let distance = self.locals.get(&assign.name);
+        if distance.is_some() {
+            self.environment
+                .assign_at(*distance.unwrap(), &assign.name, value.clone())?;
+        } else {
+            self.globals.assign(&assign.name, value.clone())?;
+        }
         return Ok(value);
     }
 
@@ -448,7 +476,7 @@ impl expr::Visitor for Interpreter {
     }
 
     fn visit_variable(&mut self, variable: &expr::Variable) -> Self::Output {
-        return Ok(self.environment.get(&variable.name)?);
+        return Ok(self.lookup_variable(&variable.name)?);
     }
 }
 

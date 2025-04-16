@@ -35,6 +35,17 @@ impl Environment {
         )));
     }
 
+    pub fn get_at(
+        &self,
+        distance: u64,
+        name: &Token,
+    ) -> Result<Option<LiteralValue>, RuntimeExceptions> {
+        if distance > 0 {
+            return self.enclosing.as_ref().unwrap().get_at(distance - 1, name);
+        }
+        return Ok(self.values.borrow().get(&name.lexeme).unwrap().clone());
+    }
+
     pub fn assign(
         &self,
         name: &Token,
@@ -54,6 +65,23 @@ impl Environment {
             name,
             format!("Undefined variable '{}'.", name.lexeme).as_str(),
         )));
+    }
+
+    pub fn assign_at(
+        &self,
+        distance: u64,
+        name: &Token,
+        value: Option<LiteralValue>,
+    ) -> Result<(), RuntimeExceptions> {
+        if distance > 0 {
+            return self
+                .enclosing
+                .as_ref()
+                .unwrap()
+                .assign_at(distance - 1, name, value);
+        }
+        self.values.borrow_mut().insert(name.lexeme.clone(), value);
+        return Ok(());
     }
 
     pub fn define(&self, name: String, value: Option<LiteralValue>) {
