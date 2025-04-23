@@ -6,9 +6,12 @@ pub trait Visitor {
     fn visit_assign(&mut self, assign: &Assign) -> Self::Output;
     fn visit_binary(&mut self, binary: &Binary) -> Self::Output;
     fn visit_call(&mut self, call: &Call) -> Self::Output;
+    fn visit_get(&mut self, get: &Get) -> Self::Output;
     fn visit_grouping(&mut self, grouping: &Grouping) -> Self::Output;
     fn visit_literal(&mut self, literal: &Literal) -> Self::Output;
     fn visit_logical(&mut self, logical: &Logical) -> Self::Output;
+    fn visit_set(&mut self, set: &Set) -> Self::Output;
+    fn visit_this(&mut self, this: &This) -> Self::Output;
     fn visit_unary(&mut self, unary: &Unary) -> Self::Output;
     fn visit_variable(&mut self, variable: &Variable) -> Self::Output;
 }
@@ -18,9 +21,12 @@ pub enum Expr {
     Assign(Assign),
     Binary(Binary),
     Call(Call),
+    Get(Get),
     Grouping(Grouping),
     Literal(Literal),
     Logical(Logical),
+    Set(Set),
+    This(This),
     Unary(Unary),
     Variable(Variable),
 }
@@ -31,9 +37,12 @@ impl Expr {
             Expr::Assign(assign) => visitor.visit_assign(assign),
             Expr::Binary(binary) => visitor.visit_binary(binary),
             Expr::Call(call) => visitor.visit_call(call),
+            Expr::Get(get) => visitor.visit_get(get),
             Expr::Grouping(grouping) => visitor.visit_grouping(grouping),
             Expr::Literal(literal) => visitor.visit_literal(literal),
             Expr::Logical(logical) => visitor.visit_logical(logical),
+            Expr::Set(set) => visitor.visit_set(set),
+            Expr::This(this) => visitor.visit_this(this),
             Expr::Unary(unary) => visitor.visit_unary(unary),
             Expr::Variable(variable) => visitor.visit_variable(variable),
         };
@@ -90,6 +99,21 @@ impl Call {
 }
 
 #[derive(Clone, PartialEq, Debug)]
+pub struct Get {
+    pub object: Box<Expr>,
+    pub name: Token,
+}
+
+impl Get {
+    pub fn new(object: Expr, name: Token) -> Get {
+        Get {
+            object: Box::new(object),
+            name,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
 pub struct Grouping {
     pub expression: Box<Expr>,
 }
@@ -127,6 +151,34 @@ impl Logical {
             operator,
             right: Box::new(right),
         }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct Set {
+    pub object: Box<Expr>,
+    pub name: Token,
+    pub value: Box<Expr>,
+}
+
+impl Set {
+    pub fn new(object: Expr, name: Token, value: Expr) -> Set {
+        Set {
+            object: Box::new(object),
+            name,
+            value: Box::new(value),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct This {
+    pub keyword: Token,
+}
+
+impl This {
+    pub fn new(keyword: Token) -> This {
+        This { keyword }
     }
 }
 

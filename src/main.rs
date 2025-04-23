@@ -18,6 +18,7 @@ mod environment;
 mod expr;
 mod interpreter;
 mod lox_callables;
+mod lox_instance;
 mod parser;
 mod resolver;
 mod scanner;

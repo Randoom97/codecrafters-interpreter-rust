@@ -7,7 +7,7 @@ use std::{
 use crate::{
     environment::Environment,
     expr::{self, Expr},
-    lox_callables::{LoxAnonymous, LoxCallable, LoxCallables, LoxFunction},
+    lox_callables::{LoxAnonymous, LoxCallable, LoxCallables, LoxClass, LoxFunction},
     runtime_error,
     stmt::{self, Stmt},
     token::{LiteralValue, Token},
@@ -217,7 +217,7 @@ impl Interpreter {
     fn lookup_variable(&mut self, name: &Token) -> Result<Option<LiteralValue>, RuntimeExceptions> {
         let distance = self.locals.get(name);
         if distance.is_some() {
-            return self.environment.get_at(*distance.unwrap(), name);
+            return self.environment.get_at(*distance.unwrap(), &name.lexeme);
         } else {
             return self.globals.get(name);
         }
@@ -235,6 +235,25 @@ impl stmt::Visitor for Interpreter {
         return result;
     }
 
+    fn visit_class(&mut self, class: &stmt::Class) -> Self::Output {
+        self.environment.define(class.name.lexeme.clone(), None);
+        let mut methods: HashMap<String, LoxFunction> = HashMap::new();
+        for method in &class.methods {
+            let function = LoxFunction::new(
+                method.clone(),
+                Rc::clone(&self.environment),
+                method.name.lexeme == "init",
+            );
+            methods.insert(method.name.lexeme.clone(), function);
+        }
+        let klass = LoxClass::new(class.name.lexeme.clone(), methods);
+        self.environment.assign(
+            &class.name,
+            Some(LiteralValue::LoxCallable(LoxCallables::LoxClass(klass))),
+        )?;
+        return Ok(());
+    }
+
     fn visit_expression(&mut self, expression: &stmt::Expression) -> Self::Output {
         self.evaluate(&expression.expression)?;
         return Ok(());
@@ -245,6 +264,7 @@ impl stmt::Visitor for Interpreter {
             Box::new(LoxFunction::new(
                 function.clone(),
                 Rc::clone(&self.environment),
+                false,
             )),
         )));
         self.environment.define(function.name.lexeme.clone(), value);
@@ -423,6 +443,17 @@ impl expr::Visitor for Interpreter {
         };
     }
 
+    fn visit_get(&mut self, get: &expr::Get) -> Self::Output {
+        let object = self.evaluate(&get.object)?;
+        return match object {
+            Some(LiteralValue::LoxInstance(instance)) => instance.get(&get.name),
+            _ => Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+                &get.name,
+                "Only instances have properties.",
+            ))),
+        };
+    }
+
     fn visit_grouping(&mut self, grouping: &expr::Grouping) -> Self::Output {
         return self.evaluate(&grouping.expression);
     }
@@ -455,6 +486,26 @@ impl expr::Visitor for Interpreter {
         }
 
         return self.evaluate(&logical.right);
+    }
+
+    fn visit_set(&mut self, set: &expr::Set) -> Self::Output {
+        let object = self.evaluate(&set.object)?;
+
+        return match object {
+            Some(LiteralValue::LoxInstance(instance)) => {
+                let value = self.evaluate(&set.value)?;
+                instance.set(&set.name, value.clone());
+                Ok(value)
+            }
+            _ => Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+                &set.name,
+                "Only instances have fields.",
+            ))),
+        };
+    }
+
+    fn visit_this(&mut self, this: &expr::This) -> Self::Output {
+        return self.lookup_variable(&this.keyword);
     }
 
     fn visit_unary(&mut self, unary: &expr::Unary) -> Self::Output {

@@ -12,12 +12,21 @@ use crate::{
 enum FunctionType {
     None,
     Function,
+    Initializer,
+    Method,
+}
+
+#[derive(Clone)]
+enum ClassType {
+    None,
+    Class,
 }
 
 pub struct Resolver {
     pub interpreter: Interpreter,
     scopes: Vec<HashMap<String, bool>>,
     current_function: FunctionType,
+    current_class: ClassType,
 }
 
 impl Resolver {
@@ -26,6 +35,7 @@ impl Resolver {
             interpreter,
             scopes: Vec::new(),
             current_function: FunctionType::None,
+            current_class: ClassType::None,
         }
     }
 
@@ -111,6 +121,32 @@ impl stmt::Visitor for Resolver {
         self.end_scope();
     }
 
+    fn visit_class(&mut self, class: &stmt::Class) -> Self::Output {
+        let enclosing_class = self.current_class.clone();
+        self.current_class = ClassType::Class;
+
+        self.declare(&class.name);
+        self.define(&class.name);
+
+        self.begin_scope();
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert("this".to_string(), true);
+
+        for method in &class.methods {
+            let mut declaration = FunctionType::Method;
+            if method.name.lexeme == "init" {
+                declaration = FunctionType::Initializer;
+            }
+            self.resolve_function(method, declaration);
+        }
+
+        self.end_scope();
+
+        self.current_class = enclosing_class;
+    }
+
     fn visit_expression(&mut self, stmt: &stmt::Expression) -> Self::Output {
         self.resolve_expr(&stmt.expression);
     }
@@ -143,6 +179,13 @@ impl stmt::Visitor for Resolver {
         }
 
         if r#return.value.is_some() {
+            match self.current_function {
+                FunctionType::Initializer => error_token(
+                    &r#return.keyword,
+                    "Can't return a value from an initializer.",
+                ),
+                _ => {}
+            }
             self.resolve_expr(r#return.value.as_ref().unwrap());
         }
     }
@@ -182,6 +225,10 @@ impl expr::Visitor for Resolver {
         }
     }
 
+    fn visit_get(&mut self, get: &expr::Get) -> Self::Output {
+        self.resolve_expr(&get.object);
+    }
+
     fn visit_grouping(&mut self, grouping: &expr::Grouping) -> Self::Output {
         self.resolve_expr(&grouping.expression);
     }
@@ -191,6 +238,23 @@ impl expr::Visitor for Resolver {
     fn visit_logical(&mut self, logical: &expr::Logical) -> Self::Output {
         self.resolve_expr(&logical.left);
         self.resolve_expr(&logical.right);
+    }
+
+    fn visit_set(&mut self, set: &expr::Set) -> Self::Output {
+        self.resolve_expr(&set.value);
+        self.resolve_expr(&set.object);
+    }
+
+    fn visit_this(&mut self, this: &expr::This) -> Self::Output {
+        match self.current_class {
+            ClassType::None => {
+                error_token(&this.keyword, "Can't use 'this' outside of a class.");
+                return;
+            }
+            _ => {}
+        }
+
+        self.resolve_local(&this.keyword);
     }
 
     fn visit_unary(&mut self, unary: &expr::Unary) -> Self::Output {

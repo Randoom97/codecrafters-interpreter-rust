@@ -3,7 +3,7 @@ use std::{
     hash::{Hash, Hasher},
 };
 
-use crate::{lox_callables::LoxCallables, token_type::TokenType};
+use crate::{lox_callables::LoxCallables, lox_instance::LoxInstance, token_type::TokenType};
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum LiteralValue {
@@ -11,6 +11,7 @@ pub enum LiteralValue {
     Number(f64),
     Boolean(bool),
     LoxCallable(LoxCallables),
+    LoxInstance(LoxInstance),
 }
 
 impl Display for LiteralValue {
@@ -20,6 +21,7 @@ impl Display for LiteralValue {
             LiteralValue::Number(value) => write!(f, "{:?}", value),
             LiteralValue::Boolean(value) => write!(f, "{}", value),
             LiteralValue::LoxCallable(value) => write!(f, "{}", value),
+            LiteralValue::LoxInstance(value) => write!(f, "{}", value),
         }
     }
 }

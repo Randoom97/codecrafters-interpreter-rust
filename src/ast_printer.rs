@@ -37,6 +37,10 @@ impl expr::Visitor for AstPrinter {
         return self.parenthesize(&"function".to_owned(), &call.arguments.iter().collect());
     }
 
+    fn visit_get(&mut self, get: &expr::Get) -> Self::Output {
+        return self.parenthesize(&"get".to_owned(), &vec![&get.object]);
+    }
+
     fn visit_grouping(&mut self, grouping: &expr::Grouping) -> String {
         return self.parenthesize(&"group".to_string(), &vec![&grouping.expression]);
     }
@@ -53,6 +57,14 @@ impl expr::Visitor for AstPrinter {
             &logical.operator.lexeme,
             &vec![&logical.left, &logical.right],
         );
+    }
+
+    fn visit_set(&mut self, set: &expr::Set) -> String {
+        return self.parenthesize(&"set".to_owned(), &vec![&set.object, &set.value]);
+    }
+
+    fn visit_this(&mut self, this: &expr::This) -> String {
+        return this.keyword.lexeme.clone();
     }
 
     fn visit_unary(&mut self, unary: &expr::Unary) -> String {

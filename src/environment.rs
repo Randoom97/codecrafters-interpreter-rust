@@ -38,12 +38,12 @@ impl Environment {
     pub fn get_at(
         &self,
         distance: u64,
-        name: &Token,
+        name: &String,
     ) -> Result<Option<LiteralValue>, RuntimeExceptions> {
         if distance > 0 {
             return self.enclosing.as_ref().unwrap().get_at(distance - 1, name);
         }
-        return Ok(self.values.borrow().get(&name.lexeme).unwrap().clone());
+        return Ok(self.values.borrow().get(name).unwrap().clone());
     }
 
     pub fn assign(

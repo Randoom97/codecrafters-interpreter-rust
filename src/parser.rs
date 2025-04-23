@@ -1,7 +1,9 @@
 use crate::{
     error_token,
-    expr::{Assign, Binary, Call, Expr, Grouping, Literal, Logical, Unary, Variable},
-    stmt::{Block, Expression, Function, If, Print, Return, Stmt, Var, While},
+    expr::{
+        Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Set, This, Unary, Variable,
+    },
+    stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While},
     token::{LiteralValue, Token},
     token_type::TokenType,
 };
@@ -43,6 +45,9 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Stmt, ParseError> {
+        if self.r#match(&vec![TokenType::CLASS]) {
+            return self.class_declaration().map(|r| Stmt::Class(r));
+        }
         if self.r#match(&vec![TokenType::FUN]) {
             return self.function("function").map(|r| Stmt::Function(r));
         }
@@ -51,6 +56,22 @@ impl Parser {
         }
 
         return self.statement();
+    }
+
+    fn class_declaration(&mut self) -> Result<Class, ParseError> {
+        let name = self
+            .consume(TokenType::IDENTIFIER, "Expect class name.")?
+            .clone();
+        self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body.")?;
+
+        let mut methods = Vec::new();
+        while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
+            methods.push(self.function("method")?);
+        }
+
+        self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.")?;
+
+        return Ok(Class::new(name, methods));
     }
 
     fn var_declaration(&mut self) -> Result<Var, ParseError> {
@@ -243,6 +264,9 @@ impl Parser {
                 Expr::Variable(variable) => {
                     return Ok(Expr::Assign(Assign::new(variable.name, value)));
                 }
+                Expr::Get(get) => {
+                    return Ok(Expr::Set(Set::new(*get.object, get.name, value)));
+                }
                 _ => {}
             }
 
@@ -344,6 +368,10 @@ impl Parser {
         loop {
             if self.r#match(&vec![TokenType::LEFT_PAREN]) {
                 expr = self.finish_call(expr)?;
+            } else if self.r#match(&vec![TokenType::DOT]) {
+                let name =
+                    self.consume(TokenType::IDENTIFIER, "Expect property name after '.'.")?;
+                expr = Expr::Get(Get::new(expr, name.clone()));
             } else {
                 break;
             }
@@ -389,6 +417,9 @@ impl Parser {
         }
         if self.r#match(&vec![TokenType::NUMBER, TokenType::STRING]) {
             return Ok(Expr::Literal(Literal::new(self.previous().literal.clone())));
+        }
+        if self.r#match(&vec![TokenType::THIS]) {
+            return Ok(Expr::This(This::new(self.previous().clone())));
         }
         if self.r#match(&vec![TokenType::IDENTIFIER]) {
             return Ok(Expr::Variable(Variable::new(self.previous().clone())));

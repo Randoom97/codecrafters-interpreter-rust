@@ -4,6 +4,7 @@ pub trait Visitor {
     type Output;
 
     fn visit_block(&mut self, block: &Block) -> Self::Output;
+    fn visit_class(&mut self, class: &Class) -> Self::Output;
     fn visit_expression(&mut self, stmt: &Expression) -> Self::Output;
     fn visit_function(&mut self, function: &Function) -> Self::Output;
     fn visit_if(&mut self, r#if: &If) -> Self::Output;
@@ -16,6 +17,7 @@ pub trait Visitor {
 #[derive(Clone, PartialEq, Debug)]
 pub enum Stmt {
     Block(Block),
+    Class(Class),
     Expression(Expression),
     Function(Function),
     If(If),
@@ -29,6 +31,7 @@ impl Stmt {
     pub fn accept<T: Visitor>(&self, visitor: &mut T) -> T::Output {
         return match self {
             Stmt::Block(block) => visitor.visit_block(block),
+            Stmt::Class(class) => visitor.visit_class(class),
             Stmt::Expression(expression) => visitor.visit_expression(expression),
             Stmt::Function(function) => visitor.visit_function(function),
             Stmt::If(r#if) => visitor.visit_if(r#if),
@@ -48,6 +51,18 @@ pub struct Block {
 impl Block {
     pub fn new(statements: Vec<Stmt>) -> Block {
         Block { statements }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct Class {
+    pub name: Token,
+    pub methods: Vec<Function>,
+}
+
+impl Class {
+    pub fn new(name: Token, methods: Vec<Function>) -> Class {
+        Class { name, methods }
     }
 }
 
