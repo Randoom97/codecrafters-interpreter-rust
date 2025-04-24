@@ -11,6 +11,7 @@ pub trait Visitor {
     fn visit_literal(&mut self, literal: &Literal) -> Self::Output;
     fn visit_logical(&mut self, logical: &Logical) -> Self::Output;
     fn visit_set(&mut self, set: &Set) -> Self::Output;
+    fn visit_super(&mut self, sup: &Super) -> Self::Output;
     fn visit_this(&mut self, this: &This) -> Self::Output;
     fn visit_unary(&mut self, unary: &Unary) -> Self::Output;
     fn visit_variable(&mut self, variable: &Variable) -> Self::Output;
@@ -26,6 +27,7 @@ pub enum Expr {
     Literal(Literal),
     Logical(Logical),
     Set(Set),
+    Super(Super),
     This(This),
     Unary(Unary),
     Variable(Variable),
@@ -42,6 +44,7 @@ impl Expr {
             Expr::Literal(literal) => visitor.visit_literal(literal),
             Expr::Logical(logical) => visitor.visit_logical(logical),
             Expr::Set(set) => visitor.visit_set(set),
+            Expr::Super(sup) => visitor.visit_super(sup),
             Expr::This(this) => visitor.visit_this(this),
             Expr::Unary(unary) => visitor.visit_unary(unary),
             Expr::Variable(variable) => visitor.visit_variable(variable),
@@ -168,6 +171,18 @@ impl Set {
             name,
             value: Box::new(value),
         }
+    }
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub struct Super {
+    pub keyword: Token,
+    pub method: Token,
+}
+
+impl Super {
+    pub fn new(keyword: Token, method: Token) -> Super {
+        Super { keyword, method }
     }
 }
 

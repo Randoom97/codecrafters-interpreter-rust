@@ -20,6 +20,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 pub struct Resolver {
@@ -128,6 +129,28 @@ impl stmt::Visitor for Resolver {
         self.declare(&class.name);
         self.define(&class.name);
 
+        if class.superclass.is_some()
+            && class.name.lexeme == class.superclass.as_ref().unwrap().name.lexeme
+        {
+            error_token(
+                &class.superclass.as_ref().unwrap().name,
+                "A class can't inherit from itself.",
+            );
+        }
+
+        if class.superclass.is_some() {
+            self.current_class = ClassType::Subclass;
+            self.resolve_expr(&Expr::Variable(class.superclass.clone().unwrap()));
+        }
+
+        if class.superclass.is_some() {
+            self.begin_scope();
+            self.scopes
+                .last_mut()
+                .unwrap()
+                .insert("super".to_string(), true);
+        }
+
         self.begin_scope();
         self.scopes
             .last_mut()
@@ -143,6 +166,10 @@ impl stmt::Visitor for Resolver {
         }
 
         self.end_scope();
+
+        if class.superclass.is_some() {
+            self.end_scope();
+        }
 
         self.current_class = enclosing_class;
     }
@@ -243,6 +270,19 @@ impl expr::Visitor for Resolver {
     fn visit_set(&mut self, set: &expr::Set) -> Self::Output {
         self.resolve_expr(&set.value);
         self.resolve_expr(&set.object);
+    }
+
+    fn visit_super(&mut self, sup: &expr::Super) -> Self::Output {
+        match self.current_class {
+            ClassType::None => error_token(&sup.keyword, "can't use 'super' outside of a class."),
+            ClassType::Subclass => {}
+            _ => error_token(
+                &sup.keyword,
+                "Can't use 'super' in a class with no superclass.",
+            ),
+        }
+
+        self.resolve_local(&sup.keyword);
     }
 
     fn visit_this(&mut self, this: &expr::This) -> Self::Output {

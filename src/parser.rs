@@ -1,7 +1,8 @@
 use crate::{
     error_token,
     expr::{
-        Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Set, This, Unary, Variable,
+        Assign, Binary, Call, Expr, Get, Grouping, Literal, Logical, Set, Super, This, Unary,
+        Variable,
     },
     stmt::{Block, Class, Expression, Function, If, Print, Return, Stmt, Var, While},
     token::{LiteralValue, Token},
@@ -62,6 +63,11 @@ impl Parser {
         let name = self
             .consume(TokenType::IDENTIFIER, "Expect class name.")?
             .clone();
+        let mut superclass = None;
+        if self.r#match(&vec![TokenType::LESS]) {
+            self.consume(TokenType::IDENTIFIER, "expect superclass name.")?;
+            superclass = Some(Variable::new(self.previous().clone()));
+        }
         self.consume(TokenType::LEFT_BRACE, "Expect '{' before class body.")?;
 
         let mut methods = Vec::new();
@@ -71,7 +77,7 @@ impl Parser {
 
         self.consume(TokenType::RIGHT_BRACE, "Expect '}' after class body.")?;
 
-        return Ok(Class::new(name, methods));
+        return Ok(Class::new(name, superclass, methods));
     }
 
     fn var_declaration(&mut self) -> Result<Var, ParseError> {
@@ -417,6 +423,14 @@ impl Parser {
         }
         if self.r#match(&vec![TokenType::NUMBER, TokenType::STRING]) {
             return Ok(Expr::Literal(Literal::new(self.previous().literal.clone())));
+        }
+        if self.r#match(&vec![TokenType::SUPER]) {
+            let keyword = self.previous().clone();
+            self.consume(TokenType::DOT, "expect '.' after 'super'.")?;
+            let method = self
+                .consume(TokenType::IDENTIFIER, "Expect superclass method name.")?
+                .clone();
+            return Ok(Expr::Super(Super::new(keyword, method)));
         }
         if self.r#match(&vec![TokenType::THIS]) {
             return Ok(Expr::This(This::new(self.previous().clone())));

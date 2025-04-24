@@ -170,19 +170,34 @@ impl LoxCallable for LoxFunction {
 #[derive(Clone, PartialEq, Debug)]
 pub struct LoxClass {
     pub name: String,
+    pub superclass: Option<Box<LoxClass>>,
     pub methods: Rc<HashMap<String, LoxFunction>>,
 }
 
 impl LoxClass {
-    pub fn new(name: String, methods: HashMap<String, LoxFunction>) -> LoxClass {
+    pub fn new(
+        name: String,
+        superclass: Option<LoxClass>,
+        methods: HashMap<String, LoxFunction>,
+    ) -> LoxClass {
         LoxClass {
             name,
+            superclass: superclass.map(|sc| Box::new(sc)),
             methods: Rc::new(methods),
         }
     }
 
     pub fn find_method(&self, name: &String) -> Option<LoxFunction> {
-        return self.methods.get(name).cloned();
+        let method = self.methods.get(name);
+        if method.is_some() {
+            return method.cloned();
+        }
+
+        if self.superclass.is_some() {
+            return self.superclass.as_ref().unwrap().find_method(name);
+        }
+
+        return None;
     }
 }
 

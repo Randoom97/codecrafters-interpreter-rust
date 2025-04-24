@@ -1,4 +1,7 @@
-use crate::{expr::Expr, token::Token};
+use crate::{
+    expr::{Expr, Variable},
+    token::Token,
+};
 
 pub trait Visitor {
     type Output;
@@ -57,12 +60,17 @@ impl Block {
 #[derive(Clone, PartialEq, Debug)]
 pub struct Class {
     pub name: Token,
+    pub superclass: Option<Variable>,
     pub methods: Vec<Function>,
 }
 
 impl Class {
-    pub fn new(name: Token, methods: Vec<Function>) -> Class {
-        Class { name, methods }
+    pub fn new(name: Token, superclass: Option<Variable>, methods: Vec<Function>) -> Class {
+        Class {
+            name,
+            superclass,
+            methods,
+        }
     }
 }
 

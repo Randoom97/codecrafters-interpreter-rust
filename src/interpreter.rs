@@ -236,7 +236,31 @@ impl stmt::Visitor for Interpreter {
     }
 
     fn visit_class(&mut self, class: &stmt::Class) -> Self::Output {
+        let mut superclass = None;
+        if class.superclass.is_some() {
+            superclass = match self.evaluate(&Expr::Variable(class.superclass.clone().unwrap()))? {
+                Some(LiteralValue::LoxCallable(LoxCallables::LoxClass(sclass))) => Some(sclass),
+                _ => None,
+            };
+
+            if superclass.is_none() {
+                return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+                    &class.superclass.as_ref().unwrap().name,
+                    "Superclass must be a class.",
+                )));
+            }
+        }
+
         self.environment.define(class.name.lexeme.clone(), None);
+        if superclass.is_some() {
+            self.environment = Rc::new(Environment::new(Some(&self.environment)));
+            self.environment.define(
+                "super".to_string(),
+                superclass
+                    .clone()
+                    .map(|sc| LiteralValue::LoxCallable(LoxCallables::LoxClass(sc))),
+            );
+        }
         let mut methods: HashMap<String, LoxFunction> = HashMap::new();
         for method in &class.methods {
             let function = LoxFunction::new(
@@ -246,7 +270,10 @@ impl stmt::Visitor for Interpreter {
             );
             methods.insert(method.name.lexeme.clone(), function);
         }
-        let klass = LoxClass::new(class.name.lexeme.clone(), methods);
+        let klass = LoxClass::new(class.name.lexeme.clone(), superclass.clone(), methods);
+        if superclass.is_some() {
+            self.environment = Rc::clone(self.environment.enclosing.as_ref().unwrap());
+        }
         self.environment.assign(
             &class.name,
             Some(LiteralValue::LoxCallable(LoxCallables::LoxClass(klass))),
@@ -502,6 +529,28 @@ impl expr::Visitor for Interpreter {
                 "Only instances have fields.",
             ))),
         };
+    }
+
+    fn visit_super(&mut self, sup: &expr::Super) -> Self::Output {
+        let distance = self.locals.get(&sup.keyword).unwrap();
+        let superclass = match self.environment.get_at(*distance, &"super".to_string())? {
+            Some(LiteralValue::LoxCallable(LoxCallables::LoxClass(class))) => class,
+            _ => panic!("shouldn't be possible to store a non class as 'super'"),
+        };
+        let object = match self.environment.get_at(distance - 1, &"this".to_string())? {
+            Some(LiteralValue::LoxInstance(instance)) => instance,
+            _ => panic!("shouldn't be possible to store a non instance as 'this'"),
+        };
+        let method = superclass.find_method(&sup.method.lexeme);
+        if method.is_none() {
+            return Err(RuntimeExceptions::RuntimeError(RuntimeError::new(
+                &sup.method,
+                &format!("Undefined property '{}'.", sup.method.lexeme),
+            )));
+        }
+        return Ok(Some(LiteralValue::LoxCallable(LoxCallables::LoxFunction(
+            Box::new(method.unwrap().bind(object.clone())),
+        ))));
     }
 
     fn visit_this(&mut self, this: &expr::This) -> Self::Output {

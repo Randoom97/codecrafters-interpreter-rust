@@ -63,6 +63,10 @@ impl expr::Visitor for AstPrinter {
         return self.parenthesize(&"set".to_owned(), &vec![&set.object, &set.value]);
     }
 
+    fn visit_super(&mut self, sup: &expr::Super) -> String {
+        return sup.keyword.lexeme.clone();
+    }
+
     fn visit_this(&mut self, this: &expr::This) -> String {
         return this.keyword.lexeme.clone();
     }
